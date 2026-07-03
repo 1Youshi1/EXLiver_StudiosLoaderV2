@@ -1,0 +1,618 @@
+--[[
+    EXCore v2.0 by EXLiver_Studios
+    Идеальный UI, все функции, плавный Fly, красивое меню
+    Автономный, без внешних библиотек. Real Executor / sUNC
+]]
+
+local player = game.Players.LocalPlayer
+local camera = workspace.CurrentCamera
+local UIS = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
+local Players = game:GetService("Players")
+local CoreGui = game:GetService("CoreGui") or player.PlayerGui
+
+-- Состояния
+local flyEnabled, noclipEnabled, thirdPersonEnabled = false, false, false
+local aimbotEnabled, antiAimEnabled = false, false
+local aimFOV, aimSmooth, aimPrediction = 100, 0.3, true
+local legitAimEnabled, legitFOV, legitSmooth = false, 80, 0.15
+local triggerEnabled, triggerDelay = false, 0.1
+local espSettings = {
+    Box = {Enabled = false, Color = Color3.fromRGB(255,255,255), Thickness = 1},
+    Name = {Enabled = false, Color = Color3.fromRGB(255,255,255)},
+    Distance = {Enabled = false, Color = Color3.fromRGB(255,255,255)},
+    Tracer = {Enabled = false, Color = Color3.fromRGB(255,255,255), Thickness = 1},
+    HealthBar = {Enabled = false},
+    HeadDot = {Enabled = false, Color = Color3.fromRGB(255,0,0)}
+}
+local chamsEnabled, chamsColor, chamsFillTransparency = false, Color3.fromRGB(255,0,0), 0.3
+local flyBodyGyro, flyBodyVel
+local flyConn, noclipConn, aimbotConn, antiAimConn, espConn, legitConn, triggerConn
+local drawings = {}
+
+-- Очистка старых GUI
+for _, g in ipairs(CoreGui:GetChildren()) do
+    if g.Name:match("^EXCore_") then g:Destroy() end
+end
+
+-- ================== ЛОАДЕР ==================
+local loaderGui = Instance.new("ScreenGui", CoreGui)
+loaderGui.Name = "EXCore_Loader"
+local loaderFrame = Instance.new("Frame", loaderGui)
+loaderFrame.Size = UDim2.new(0, 280, 0, 150)
+loaderFrame.Position = UDim2.new(0.5, -140, 0.5, -75)
+loaderFrame.BackgroundColor3 = Color3.fromRGB(18, 5, 22)
+loaderFrame.BorderSizePixel = 0
+loaderFrame.ClipsDescendants = true
+Instance.new("UICorner", loaderFrame).CornerRadius = UDim.new(0, 6)
+Instance.new("Frame", loaderFrame):Apply({
+    Size = UDim2.new(1,0,0,4),
+    BackgroundColor3 = Color3.fromRGB(220,20,40)
+})
+local loaderText = Instance.new("TextLabel", loaderFrame):Apply({
+    Size = UDim2.new(1,0,1,0),
+    BackgroundTransparency = 1,
+    Font = Enum.Font.GothamBlack,
+    Text = "EXCore",
+    TextColor3 = Color3.fromRGB(255,50,50),
+    TextSize = 56
+})
+coroutine.wrap(function()
+    while loaderText and loaderText.Parent do
+        for _, t in ipairs({0, 0.85, 0}) do
+            TweenService:Create(loaderText, TweenInfo.new(0.8, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {TextTransparency = t}):Play()
+            task.wait(0.8)
+        end
+    end
+end)()
+-- Перетаскивание
+local drag, ds, sp
+loaderFrame.InputBegan:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton1 then drag=true ds=i.Position sp=loaderFrame.Position end end)
+loaderFrame.InputEnded:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton1 then drag=false end end)
+UIS.InputChanged:Connect(function(i) if drag and i.UserInputType == Enum.UserInputType.MouseMovement then local d=i.Position-ds loaderFrame.Position = UDim2.new(sp.X.Scale, sp.X.Offset+d.X, sp.Y.Scale, sp.Y.Offset+d.Y) end end)
+
+task.delay(3, function()
+    TweenService:Create(loaderFrame, TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {Size = UDim2.new(0,0,0,0)}):Play()
+    task.wait(0.6)
+    loaderGui:Destroy()
+    createLauncher()
+end)
+
+-- ================== ЛАУНЧЕР ==================
+function createLauncher()
+    local lgui = Instance.new("ScreenGui", CoreGui)
+    lgui.Name = "EXCore_Launch"
+    local m = Instance.new("Frame", lgui)
+    m.Size = UDim2.new(0, 260, 0, 190)
+    m.Position = UDim2.new(0.5, -130, 0.5, -95)
+    m.BackgroundColor3 = Color3.fromRGB(25,25,30)
+    m.BorderSizePixel = 0
+    Instance.new("UICorner", m).CornerRadius = UDim.new(0,6)
+    Instance.new("Frame", m):Apply({Size=UDim2.new(1,0,0,4), BackgroundColor3=Color3.fromRGB(220,20,40)})
+    Instance.new("TextLabel", m):Apply({
+        Size=UDim2.new(1,0,0,50), Position=UDim2.new(0,0,0,25),
+        BackgroundTransparency=1, Font=Enum.Font.GothamBlack, Text="EXCore",
+        TextColor3=Color3.fromRGB(50,150,255), TextSize=38
+    })
+    local btn = Instance.new("TextButton", m):Apply({
+        Size=UDim2.new(0,140,0,36), Position=UDim2.new(0.5,-70,0,95),
+        BackgroundColor3=Color3.fromRGB(220,20,40), BorderSizePixel=0,
+        Text="LOAD", Font=Enum.Font.GothamBold, TextColor3=Color3.fromRGB(255,255,255), TextSize=18,
+        AutoButtonColor=false
+    })
+    Instance.new("UICorner", btn).CornerRadius = UDim.new(0,4)
+    btn.MouseEnter:Connect(function() TweenService:Create(btn, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(255,40,60)}):Play() end)
+    btn.MouseLeave:Connect(function() TweenService:Create(btn, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(220,20,40)}):Play() end)
+    Instance.new("TextLabel", m):Apply({
+        Size=UDim2.new(1,0,0,20), Position=UDim2.new(0,0,0,145),
+        BackgroundTransparency=1, Font=Enum.Font.Gotham, Text="by EXLiver_Studios",
+        TextColor3=Color3.fromRGB(150,150,150), TextSize=12
+    })
+    m.AnchorPoint = Vector2.new(0.5,0.5)
+    m.Position, m.Size = UDim2.new(0.5,0,0.5,0), UDim2.new(0,0,0,0)
+    TweenService:Create(m, TweenInfo.new(0.4, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Size=UDim2.new(0,260,0,190)}):Play()
+
+    btn.MouseButton1Click:Connect(function()
+        btn.Text = "LOADING..."
+        btn.Interactable = false
+        local notif = Instance.new("Frame", lgui):Apply({
+            Size=UDim2.new(0,220,0,40), Position=UDim2.new(1,20,0,20),
+            BackgroundColor3=Color3.fromRGB(30,30,35), BorderSizePixel=0
+        })
+        Instance.new("UICorner", notif).CornerRadius = UDim.new(0,6)
+        local nt = Instance.new("TextLabel", notif):Apply({
+            Size=UDim2.new(1,-10,1,0), Position=UDim2.new(0,10,0,0),
+            BackgroundTransparency=1, Font=Enum.Font.GothamBold,
+            Text="Initialising 1/3 <3", TextColor3=Color3.fromRGB(255,255,255), TextSize=16
+        })
+        TweenService:Create(notif, TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Position=UDim2.new(1,-240,0,20)}):Play()
+        task.spawn(function()
+            task.wait(14) nt.Text = "Initialising 2/3 <3"
+            task.wait(2) nt.Text = "Initialising 3/3 <3"
+            task.wait(5)
+            TweenService:Create(m, TweenInfo.new(0.4), {Size=UDim2.new(0,0,0,0)}):Play()
+            task.wait(0.5)
+            lgui:Destroy()
+            createMainUI()
+        end)
+    end)
+end
+
+-- ================== ГЛАВНЫЙ UI ==================
+function createMainUI()
+    local gui = Instance.new("ScreenGui", CoreGui)
+    gui.Name = "EXCore_Main"
+    local main = Instance.new("Frame", gui):Apply({
+        Size=UDim2.new(0,680,0,460), Position=UDim2.new(0.5,-340,0.5,-230),
+        BackgroundColor3=Color3.fromRGB(28,28,33), BorderSizePixel=0, ClipsDescendants=true
+    })
+    Instance.new("UICorner", main).CornerRadius = UDim.new(0,8)
+    -- Тень
+    local shadow = Instance.new("ImageLabel", main):Apply({
+        AnchorPoint=Vector2.new(0.5,0.5), Size=UDim2.new(1,20,1,20), Position=UDim2.new(0.5,0,0.5,0),
+        BackgroundTransparency=1, Image="rbxassetid://6014261993", ImageColor3=Color3.new(0,0,0), ImageTransparency=0.4, ZIndex=-1
+    })
+    -- Верхняя панель
+    local topBar = Instance.new("Frame", main):Apply({Size=UDim2.new(1,0,0,40), BackgroundColor3=Color3.fromRGB(32,32,37), BorderSizePixel=0})
+    Instance.new("UICorner", topBar).CornerRadius = UDim.new(0,8)
+    Instance.new("TextLabel", topBar):Apply({
+        Size=UDim2.new(0,100,1,0), Position=UDim2.new(0,14,0,0), BackgroundTransparency=1,
+        Font=Enum.Font.GothamBlack, Text="EXCore", TextColor3=Color3.fromRGB(80,180,255), TextSize=24, TextXAlignment=Enum.TextXAlignment.Left
+    })
+    local userF = Instance.new("Frame", topBar):Apply({Size=UDim2.new(0,140,1,0), Position=UDim2.new(1,-150,0,0), BackgroundTransparency=1})
+    Instance.new("ImageLabel", userF):Apply({
+        Size=UDim2.new(0,28,0,28), Position=UDim2.new(1,-28,0.5,-14), BackgroundColor3=Color3.fromRGB(50,50,55),
+        Image="rbxthumb://type=AvatarHeadShot&id="..player.UserId.."&w=48&h=48"
+    }):Add("UICorner", {CornerRadius=UDim.new(1,0)})
+    Instance.new("TextLabel", userF):Apply({
+        Size=UDim2.new(0,100,1,0), Position=UDim2.new(0,0,0,0), BackgroundTransparency=1,
+        Font=Enum.Font.GothamSemibold, Text=player.DisplayName, TextColor3=Color3.fromRGB(220,220,220), TextSize=14, TextXAlignment=Enum.TextXAlignment.Right
+    })
+    Instance.new("Frame", main):Apply({Size=UDim2.new(1,0,0,1), Position=UDim2.new(0,0,0,40), BackgroundColor3=Color3.fromRGB(60,60,65)})
+    -- Левая навигация
+    local nav = Instance.new("Frame", main):Apply({
+        Size=UDim2.new(0,140,1,-40), Position=UDim2.new(0,0,0,41),
+        BackgroundColor3=Color3.fromRGB(22,22,27), BorderSizePixel=0
+    })
+    Instance.new("UICorner", nav).CornerRadius = UDim.new(0,8)
+    -- Контент
+    local content = Instance.new("Frame", main):Apply({
+        Size=UDim2.new(1,-140,1,-40), Position=UDim2.new(0,140,0,41),
+        BackgroundColor3=Color3.fromRGB(25,25,30), BorderSizePixel=0
+    })
+    Instance.new("UICorner", content).CornerRadius = UDim.new(0,8)
+    -- Нижняя панель
+    local bottomBar = Instance.new("Frame", main):Apply({
+        Size=UDim2.new(1,0,0,34), Position=UDim2.new(0,0,1,-34),
+        BackgroundColor3=Color3.fromRGB(32,32,37), BorderSizePixel=0
+    })
+    Instance.new("UICorner", bottomBar).CornerRadius = UDim.new(0,8)
+    -- Кнопки
+    local function Btn(txt, pos, color, callback)
+        local b = Instance.new("TextButton", bottomBar):Apply({
+            Size=UDim2.new(0,75,0,26), Position=pos, BackgroundColor3=color, BorderSizePixel=0,
+            Text=txt, Font=Enum.Font.GothamBold, TextColor3=Color3.fromRGB(255,255,255), TextSize=13, AutoButtonColor=false
+        })
+        Instance.new("UICorner", b).CornerRadius = UDim.new(0,4)
+        b.MouseEnter:Connect(function() TweenService:Create(b, TweenInfo.new(0.2), {BackgroundColor3=color:Lerp(Color3.new(1,1,1),0.15)}):Play() end)
+        b.MouseLeave:Connect(function() TweenService:Create(b, TweenInfo.new(0.2), {BackgroundColor3=color}):Play() end)
+        if callback then b.MouseButton1Click:Connect(callback) end
+        return b
+    end
+    Btn("Exit", UDim2.new(0,12,0.5,-13), Color3.fromRGB(50,50,55), function() gui:Destroy() end)
+    Btn("Load", UDim2.new(1,-87,0.5,-13), Color3.fromRGB(220,20,40), function()
+        local n = Instance.new("TextLabel", gui):Apply({
+            Size=UDim2.new(0,180,0,28), Position=UDim2.new(1,20,0,12),
+            BackgroundColor3=Color3.fromRGB(40,40,45), BorderSizePixel=0,
+            Font=Enum.Font.GothamBold, Text="EXCore Active!", TextColor3=Color3.fromRGB(100,255,100), TextSize=14
+        })
+        Instance.new("UICorner", n).CornerRadius = UDim.new(0,4)
+        TweenService:Create(n, TweenInfo.new(0.4), {Position=UDim2.new(1,-200,0,12)}):Play()
+        task.delay(3, function() n:Destroy() end)
+    end)
+    Instance.new("TextLabel", bottomBar):Apply({
+        Size=UDim2.new(0,160,0,20), Position=UDim2.new(0.5,-80,0.5,-10),
+        BackgroundTransparency=1, Font=Enum.Font.Gotham, Text="EXLiver_Studios", TextColor3=Color3.fromRGB(120,120,120), TextSize=11
+    })
+
+    -- Вкладки
+    local tabs = {}
+    local function selectTab(name)
+        for _,t in ipairs(tabs) do
+            t.Content.Visible = (t.Name == name)
+            t.Button.BackgroundColor3 = (t.Name == name) and Color3.fromRGB(50,50,55) or Color3.fromRGB(30,30,35)
+        end
+    end
+    local function addTab(name, icon)
+        local btn = Instance.new("TextButton", nav):Apply({
+            Size=UDim2.new(1,-10,0,34), Position=UDim2.new(0,5,0,10 + (#tabs*38)),
+            BackgroundColor3=Color3.fromRGB(30,30,35), BorderSizePixel=0, Text="", AutoButtonColor=false
+        })
+        Instance.new("UICorner", btn).CornerRadius = UDim.new(0,4)
+        Instance.new("TextLabel", btn):Apply({
+            Size=UDim2.new(0,22,0,22), Position=UDim2.new(0,8,0.5,-11),
+            BackgroundTransparency=1, Font=Enum.Font.GothamBold, Text=icon, TextColor3=Color3.fromRGB(255,255,255), TextSize=16
+        })
+        Instance.new("TextLabel", btn):Apply({
+            Size=UDim2.new(1,-35,1,0), Position=UDim2.new(0,32,0,0),
+            BackgroundTransparency=1, Font=Enum.Font.GothamSemibold, Text=name,
+            TextColor3=Color3.fromRGB(255,255,255), TextSize=14, TextXAlignment=Enum.TextXAlignment.Left
+        })
+        local tabContent = Instance.new("Frame", content):Apply({Size=UDim2.new(1,0,1,0), BackgroundTransparency=1, Visible=false})
+        local tab = {Name=name, Button=btn, Content=tabContent}
+        table.insert(tabs, tab)
+        btn.MouseButton1Click:Connect(function() selectTab(name) end)
+        return tabContent
+    end
+
+    local rageTab = addTab("RAGE", "💀")
+    local legitTab = addTab("LEGIT", "🎯")
+    local visualTab = addTab("VISUAL", "👁")
+    local miscTab = addTab("MISC", "⚙")
+    local skinsTab = addTab("SKINS", "🎨")
+    local luaTab = addTab("LUA", "📜")
+    selectTab("RAGE")
+
+    -- ============== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ UI ==============
+    local function sec(parent, name, y, h)
+        local s = Instance.new("Frame", parent):Apply({
+            Size=UDim2.new(1,-20,0,h or 200), Position=UDim2.new(0,10,0,y),
+            BackgroundColor3=Color3.fromRGB(20,20,25), BorderSizePixel=0
+        })
+        Instance.new("UICorner", s).CornerRadius = UDim.new(0,6)
+        Instance.new("TextLabel", s):Apply({
+            Size=UDim2.new(1,-10,0,20), Position=UDim2.new(0,5,0,5),
+            BackgroundTransparency=1, Font=Enum.Font.GothamBold, Text=name,
+            TextColor3=Color3.fromRGB(255,255,255), TextSize=13, TextXAlignment=Enum.TextXAlignment.Left
+        })
+        return s
+    end
+    local function toggle(parent, y, name, def, cb)
+        local b = Instance.new("TextButton", parent):Apply({
+            Size=UDim2.new(1,-20,0,26), Position=UDim2.new(0,10,0,30 + y*28),
+            BackgroundColor3=def and Color3.fromRGB(50,200,100) or Color3.fromRGB(80,80,80),
+            BorderSizePixel=0, Text="  "..name, Font=Enum.Font.Gotham, TextColor3=Color3.fromRGB(255,255,255),
+            TextSize=13, TextXAlignment=Enum.TextXAlignment.Left, AutoButtonColor=false
+        })
+        Instance.new("UICorner", b).CornerRadius = UDim.new(0,3)
+        local s=def
+        b.MouseButton1Click:Connect(function() s=not s b.BackgroundColor3 = s and Color3.fromRGB(50,200,100) or Color3.fromRGB(80,80,80) if cb then cb(s) end end)
+        return b
+    end
+    local function slider(parent, y, name, min, max, def, cb)
+        local f = Instance.new("Frame", parent):Apply({Size=UDim2.new(1,-20,0,38), Position=UDim2.new(0,10,0,30 + y*40), BackgroundTransparency=1})
+        local lbl = Instance.new("TextLabel", f):Apply({Size=UDim2.new(1,0,0,15), BackgroundTransparency=1, Font=Enum.Font.Gotham, Text=name..": "..def, TextColor3=Color3.fromRGB(200,200,200), TextSize=12, TextXAlignment=Enum.TextXAlignment.Left})
+        local s = Instance.new("TextButton", f):Apply({Size=UDim2.new(1,0,0,8), Position=UDim2.new(0,0,0,20), BackgroundColor3=Color3.fromRGB(45,45,50), BorderSizePixel=0, Text="", AutoButtonColor=false})
+        Instance.new("UICorner", s).CornerRadius = UDim.new(0,4)
+        local fill = Instance.new("Frame", s):Apply({Size=UDim2.new((def-min)/(max-min),0,1,0), BackgroundColor3=Color3.fromRGB(70,150,255), BorderSizePixel=0})
+        Instance.new("UICorner", fill).CornerRadius = UDim.new(0,4)
+        local drag=false, cur=def
+        local function upd(v) fill.Size=UDim2.new((v-min)/(max-min),0,1,0) lbl.Text=name..": "..math.round(v*10)/10 if cb then cb(v) end end
+        s.InputBegan:Connect(function(i) if i.UserInputType==Enum.UserInputType.MouseButton1 then drag=true end end)
+        s.InputEnded:Connect(function(i) if i.UserInputType==Enum.UserInputType.MouseButton1 then drag=false end end)
+        UIS.InputChanged:Connect(function(i) if drag and i.UserInputType==Enum.UserInputType.MouseMovement then local rel=math.clamp((i.Position.X-s.AbsolutePosition.X)/s.AbsoluteSize.X,0,1) cur=min+rel*(max-min) upd(cur) end end)
+        return f
+    end
+    local function colorpicker(parent, y, name, def, cb)
+        local f = Instance.new("Frame", parent):Apply({Size=UDim2.new(1,-20,0,32), Position=UDim2.new(0,10,0,30 + y*34), BackgroundTransparency=1})
+        Instance.new("TextLabel", f):Apply({Size=UDim2.new(0,80,0,20), BackgroundTransparency=1, Font=Enum.Font.Gotham, Text=name, TextColor3=Color3.fromRGB(200,200,200), TextSize=12, TextXAlignment=Enum.TextXAlignment.Left})
+        local preview = Instance.new("Frame", f):Apply({Size=UDim2.new(0,24,0,24), Position=UDim2.new(0,90,0,0), BackgroundColor3=def, BorderSizePixel=0})
+        Instance.new("UICorner", preview).CornerRadius = UDim.new(0,4)
+        local r,g,b = def.R*255, def.G*255, def.B*255
+        local function uc() local c=Color3.fromRGB(r,g,b) preview.BackgroundColor3=c if cb then cb(c) end end
+        for i,ch in ipairs({"R","G","B"}) do
+            local bb = Instance.new("TextButton", f):Apply({Size=UDim2.new(0,20,0,20), Position=UDim2.new(0,120+(i-1)*25,0,2), BackgroundColor3=Color3.fromRGB(50,50,50), Text=ch, Font=Enum.Font.GothamBold, TextColor3=Color3.fromRGB(255,255,255), TextSize=12, AutoButtonColor=false})
+            Instance.new("UICorner", bb).CornerRadius = UDim.new(0,3)
+            bb.MouseButton1Click:Connect(function()
+                local v = ch=="R" and r or ch=="G" and g or b
+                v = (v+30)%255
+                if ch=="R" then r=v elseif ch=="G" then g=v else b=v end
+                uc()
+            end)
+        end
+    end
+    local function keybind(parent, y, name, defkey, cb)
+        local f = Instance.new("Frame", parent):Apply({Size=UDim2.new(1,-20,0,28), Position=UDim2.new(0,10,0,30 + y*34), BackgroundTransparency=1})
+        Instance.new("TextLabel", f):Apply({Size=UDim2.new(0,80,0,20), BackgroundTransparency=1, Font=Enum.Font.Gotham, Text=name, TextColor3=Color3.fromRGB(200,200,200), TextSize=12, TextXAlignment=Enum.TextXAlignment.Left})
+        local btn = Instance.new("TextButton", f):Apply({Size=UDim2.new(0,80,0,22), Position=UDim2.new(0,100,0,0), BackgroundColor3=Color3.fromRGB(50,50,55), BorderSizePixel=0, Text=defkey or "None", Font=Enum.Font.Gotham, TextColor3=Color3.fromRGB(255,255,255), TextSize=13, AutoButtonColor=false})
+        Instance.new("UICorner", btn).CornerRadius = UDim.new(0,3)
+        local binding=false
+        btn.MouseButton1Click:Connect(function() binding=true btn.Text="..." end)
+        UIS.InputBegan:Connect(function(i,g) if binding and not g and i.UserInputType==Enum.UserInputType.Keyboard then binding=false btn.Text=i.KeyCode.Name cb(i.KeyCode) end end)
+        return f
+    end
+
+    -- ============== RAGE ==============
+    local aimSec = sec(rageTab, "AIMBOT", 10, 150)
+    toggle(aimSec,0,"Enabled",false,function(v) aimbotEnabled=v end)
+    slider(aimSec,1,"FOV",0,500,100,function(v) aimFOV=v end)
+    slider(aimSec,2,"Smooth",0,1,0.3,function(v) aimSmooth=v end)
+    toggle(aimSec,3,"Prediction",true,function(v) aimPrediction=v end)
+
+    local aaSec = sec(rageTab, "ANTI-AIM & MOVEMENT", 170, 170)
+    toggle(aaSec,0,"Desync",false,function(v)
+        antiAimEnabled=v
+        if v then
+            if antiAimConn then antiAimConn:Disconnect() end
+            antiAimConn = RunService.Heartbeat:Connect(function()
+                if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+                    player.Character.HumanoidRootPart.CFrame = player.Character.HumanoidRootPart.CFrame * CFrame.Angles(0, math.rad(math.random(-180,180)), 0)
+                end
+            end)
+        else
+            if antiAimConn then antiAimConn:Disconnect() end
+        end
+    end)
+    toggle(aaSec,1,"Fly",false,function(v) toggleFly(v) end)
+    toggle(aaSec,2,"Noclip",false,function(v) toggleNoclip(v) end)
+    toggle(aaSec,3,"Third Person",false,function(v)
+        thirdPersonEnabled=v
+        player.CameraMode = v and Enum.CameraMode.Classic or Enum.CameraMode.LockFirstPerson
+        camera.CameraSubject = player.Character and player.Character:FindFirstChild("Humanoid")
+        camera.CameraType = Enum.CameraType.Custom
+    end)
+
+    -- ============== LEGIT ==============
+    local legitAimSec = sec(legitTab, "LEGIT AIM", 10, 120)
+    toggle(legitAimSec,0,"Enabled",false,function(v) legitAimEnabled=v end)
+    slider(legitAimSec,1,"FOV",0,300,80,function(v) legitFOV=v end)
+    slider(legitAimSec,2,"Smooth",0,1,0.15,function(v) legitSmooth=v end)
+
+    local triggerSec = sec(legitTab, "TRIGGERBOT", 140, 90)
+    toggle(triggerSec,0,"Enabled",false,function(v) triggerEnabled=v end)
+    slider(triggerSec,1,"Delay (ms)",0,500,100,function(v) triggerDelay=v/1000 end)
+
+    -- ============== VISUAL ==============
+    local espSec = sec(visualTab, "ESP", 10, 250)
+    local espNames = {"Box","Name","Distance","Tracer","HealthBar","HeadDot"}
+    for i,name in ipairs(espNames) do
+        toggle(espSec,i-1,name,false,function(v)
+            local key = name:gsub(" ","")
+            espSettings[key].Enabled = v
+            createESP()
+        end)
+    end
+    colorpicker(espSec,6,"Box Color",Color3.fromRGB(255,255,255),function(c) espSettings.Box.Color=c; createESP() end)
+    colorpicker(espSec,7,"Tracer Color",Color3.fromRGB(255,255,255),function(c) espSettings.Tracer.Color=c; createESP() end)
+
+    local chamsSec = sec(visualTab, "CHAMS", 270, 80)
+    toggle(chamsSec,0,"Enabled",false,function(v) chamsEnabled=v; updateChams() end)
+    colorpicker(chamsSec,1,"Color",Color3.fromRGB(255,0,0),function(c) chamsColor=c; updateChams() end)
+
+    -- ============== MISC ==============
+    local miscSec = sec(miscTab, "MISC", 10, 180)
+    toggle(miscSec,0,"Streamer Mode",false,function(v) end)
+    toggle(miscSec,1,"Unlock FPS",false,function(v) RunService:Set3dRenderingEnabled(not v) end)
+    keybind(miscSec,2,"Fly Toggle","F",function(k)
+        UIS.InputBegan:Connect(function(i,g) if not g and i.KeyCode==k then toggleFly(not flyEnabled) end end)
+    end)
+    keybind(miscSec,3,"Noclip Toggle","G",function(k)
+        UIS.InputBegan:Connect(function(i,g) if not g and i.KeyCode==k then toggleNoclip(not noclipEnabled) end end)
+    end)
+
+    -- ============== SKINS (заглушка) ==============
+    local skinSec = sec(skinsTab, "SKIN CHANGER", 10, 100)
+    toggle(skinSec,0,"Enabled",false)
+
+    -- ============== LUA EXECUTOR ==============
+    local luaSec = sec(luaTab, "LUA EXECUTOR", 10, 180)
+    local textBox = Instance.new("TextBox", luaSec):Apply({
+        Size=UDim2.new(1,-20,0,100), Position=UDim2.new(0,10,0,30),
+        BackgroundColor3=Color3.fromRGB(30,30,30), BorderSizePixel=0,
+        Text="", PlaceholderText="-- Enter Lua code...", Font=Enum.Font.Code, TextColor3=Color3.fromRGB(255,255,255),
+        TextSize=14, TextXAlignment=Enum.TextXAlignment.Left, TextYAlignment=Enum.TextYAlignment.Top,
+        ClearTextOnFocus=false, MultiLine=true
+    })
+    Instance.new("UICorner", textBox).CornerRadius = UDim.new(0,4)
+    local execBtn = Instance.new("TextButton", luaSec):Apply({
+        Size=UDim2.new(0,80,0,26), Position=UDim2.new(0,10,0,140),
+        BackgroundColor3=Color3.fromRGB(50,200,100), BorderSizePixel=0,
+        Text="Execute", Font=Enum.Font.GothamBold, TextColor3=Color3.fromRGB(255,255,255), TextSize=14, AutoButtonColor=false
+    })
+    Instance.new("UICorner", execBtn).CornerRadius = UDim.new(0,4)
+    execBtn.MouseButton1Click:Connect(function()
+        local fn, err = loadstring(textBox.Text)
+        if fn then fn() else warn("Lua error: "..err) end
+    end)
+
+    -- ============== ФУНКЦИИ ==============
+    function createESP()
+        if espConn then espConn:Disconnect() end
+        for _,d in pairs(drawings) do if d then d:Remove() end end
+        drawings = {}
+        local any=false
+        for _,v in pairs(espSettings) do if v.Enabled then any=true break end end
+        if not any then return end
+        espConn = RunService.RenderStepped:Connect(function()
+            for _,plr in ipairs(Players:GetPlayers()) do
+                if plr==player or not plr.Character or not plr.Character:FindFirstChild("Head") then continue end
+                local head=plr.Character.Head
+                local pos, onScreen = camera:WorldToViewportPoint(head.Position)
+                local id=plr.UserId
+                if onScreen then
+                    if espSettings.Box.Enabled then
+                        local d=drawings[id.."_box"] or Drawing.new("Square")
+                        d.Visible=true; d.Color=espSettings.Box.Color; d.Thickness=espSettings.Box.Thickness; d.Filled=false
+                        d.Size=Vector2.new(50,80); d.Position=Vector2.new(pos.X-25,pos.Y-40)
+                        drawings[id.."_box"]=d
+                    end
+                    if espSettings.Name.Enabled then
+                        local d=drawings[id.."_name"] or Drawing.new("Text")
+                        d.Visible=true; d.Text=plr.Name; d.Color=espSettings.Name.Color; d.Size=13
+                        d.Position=Vector2.new(pos.X,pos.Y-60); d.Center=true
+                        drawings[id.."_name"]=d
+                    end
+                    if espSettings.Distance.Enabled then
+                        local d=drawings[id.."_dist"] or Drawing.new("Text")
+                        d.Visible=true; local root=player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+                        local dist=root and (root.Position-head.Position).Magnitude or 0
+                        d.Text=math.floor(dist).."m"; d.Color=espSettings.Distance.Color; d.Size=13
+                        d.Position=Vector2.new(pos.X,pos.Y-45); d.Center=true
+                        drawings[id.."_dist"]=d
+                    end
+                    if espSettings.Tracer.Enabled then
+                        local d=drawings[id.."_tracer"] or Drawing.new("Line")
+                        d.Visible=true; d.From=Vector2.new(camera.ViewportSize.X/2, camera.ViewportSize.Y)
+                        d.To=Vector2.new(pos.X,pos.Y); d.Color=espSettings.Tracer.Color; d.Thickness=espSettings.Tracer.Thickness
+                        drawings[id.."_tracer"]=d
+                    end
+                    if espSettings.HealthBar.Enabled then
+                        local d=drawings[id.."_health"] or Drawing.new("Square")
+                        d.Visible=true; local hum=plr.Character:FindFirstChild("Humanoid")
+                        local h=hum and hum.Health/hum.MaxHealth or 1
+                        d.Color=Color3.new(1-h,h,0); d.Filled=true
+                        d.Size=Vector2.new(2,40*h); d.Position=Vector2.new(pos.X-30,pos.Y-20)
+                        drawings[id.."_health"]=d
+                    end
+                    if espSettings.HeadDot.Enabled then
+                        local d=drawings[id.."_dot"] or Drawing.new("Square")
+                        d.Visible=true; d.Color=espSettings.HeadDot.Color; d.Filled=true
+                        d.Size=Vector2.new(6,6); d.Position=Vector2.new(pos.X-3,pos.Y-3)
+                        drawings[id.."_dot"]=d
+                    end
+                else
+                    for _,tag in ipairs({"_box","_name","_dist","_tracer","_health","_dot"}) do
+                        local d=drawings[id..tag] if d then d.Visible=false end
+                    end
+                end
+            end
+        end)
+    end
+
+    function updateChams()
+        for _,plr in ipairs(Players:GetPlayers()) do
+            if plr~=player and plr.Character then
+                local hl = plr.Character:FindFirstChild("EXCore_Chams") or Instance.new("Highlight")
+                hl.Name="EXCore_Chams"
+                hl.FillColor=chamsColor
+                hl.OutlineColor=Color3.new(1,1,1)
+                hl.FillTransparency=chamsEnabled and chamsFillTransparency or 1
+                hl.OutlineTransparency=chamsEnabled and 0 or 1
+                hl.Enabled=chamsEnabled
+                if not hl.Parent then hl.Adornee=plr.Character hl.Parent=plr.Character end
+            end
+        end
+    end
+
+    aimbotConn = RunService.Heartbeat:Connect(function()
+        if not aimbotEnabled or not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") then return end
+        local target,shortestDist=nil,aimFOV
+        for _,plr in ipairs(Players:GetPlayers()) do
+            if plr~=player and plr.Character and plr.Character:FindFirstChild("Head") and plr.Character:FindFirstChild("Humanoid") and plr.Character.Humanoid.Health>0 then
+                local pos,onScreen=camera:WorldToViewportPoint(plr.Character.Head.Position)
+                local dist=(Vector2.new(pos.X,pos.Y)-camera.ViewportSize/2).Magnitude
+                if onScreen and dist<shortestDist then shortestDist=dist target=plr.Character.Head end
+            end
+        end
+        if target then
+            if aimPrediction then
+                -- простое предсказание по Velocity
+                local vel = target.Velocity
+                camera.CFrame = camera.CFrame:Lerp(CFrame.new(camera.CFrame.Position, target.Position + vel*0.15), aimSmooth)
+            else
+                camera.CFrame = camera.CFrame:Lerp(CFrame.new(camera.CFrame.Position, target.Position), aimSmooth)
+            end
+        end
+    end)
+
+    -- Легитный аим
+    legitConn = RunService.Heartbeat:Connect(function()
+        if not legitAimEnabled or not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") then return end
+        local target,shortestDist=nil,legitFOV
+        for _,plr in ipairs(Players:GetPlayers()) do
+            if plr~=player and plr.Character and plr.Character:FindFirstChild("Head") and plr.Character:FindFirstChild("Humanoid") and plr.Character.Humanoid.Health>0 then
+                local pos,onScreen=camera:WorldToViewportPoint(plr.Character.Head.Position)
+                local dist=(Vector2.new(pos.X,pos.Y)-camera.ViewportSize/2).Magnitude
+                if onScreen and dist<shortestDist then shortestDist=dist target=plr.Character.Head end
+            end
+        end
+        if target then
+            local goal = camera:WorldToScreenPoint(target.Position)
+            local mousePos = UIS:GetMouseLocation()
+            local delta = Vector2.new(goal.X - mousePos.X, goal.Y - mousePos.Y)
+            mousemoverel(delta.X * legitSmooth, delta.Y * legitSmooth)
+        end
+    end)
+
+    -- Триггербот
+    triggerConn = RunService.Heartbeat:Connect(function()
+        if not triggerEnabled or not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") then return end
+        local mouse = UIS:GetMouseLocation()
+        for _,plr in ipairs(Players:GetPlayers()) do
+            if plr~=player and plr.Character and plr.Character:FindFirstChild("Head") and plr.Character:FindFirstChild("Humanoid") and plr.Character.Humanoid.Health>0 then
+                local pos = camera:WorldToScreenPoint(plr.Character.Head.Position)
+                if (Vector2.new(pos.X,pos.Y)-mouse).Magnitude < 20 then
+                    task.wait(triggerDelay)
+                    if triggerEnabled then
+                        -- симуляция клика
+                        mouse1press()
+                        task.wait(0.05)
+                        mouse1release()
+                    end
+                    break
+                end
+            end
+        end
+    end)
+
+    function toggleFly(v)
+        flyEnabled = v
+        local char = player.Character or player.CharacterAdded:Wait()
+        local root = char:WaitForChild("HumanoidRootPart")
+        local hum = char:WaitForChild("Humanoid")
+        if v then
+            hum.PlatformStand = true
+            flyBodyGyro = Instance.new("BodyGyro", root)
+            flyBodyGyro.MaxTorque = Vector3.new(400000,400000,400000)
+            flyBodyGyro.CFrame = root.CFrame
+            flyBodyVel = Instance.new("BodyVelocity", root)
+            flyBodyVel.MaxForce = Vector3.new(400000,400000,400000)
+            flyBodyVel.Velocity = Vector3.new()
+            flyConn = RunService.Heartbeat:Connect(function()
+                if not flyEnabled or not player.Character then return end
+                local r = player.Character.HumanoidRootPart
+                local dir = Vector3.new()
+                if UIS:IsKeyDown(Enum.KeyCode.W) then dir += camera.CFrame.LookVector end
+                if UIS:IsKeyDown(Enum.KeyCode.S) then dir -= camera.CFrame.LookVector end
+                if UIS:IsKeyDown(Enum.KeyCode.A) then dir -= camera.CFrame.RightVector end
+                if UIS:IsKeyDown(Enum.KeyCode.D) then dir += camera.CFrame.RightVector end
+                if UIS:IsKeyDown(Enum.KeyCode.Space) then dir += Vector3.new(0,1,0) end
+                if UIS:IsKeyDown(Enum.KeyCode.LeftShift) then dir -= Vector3.new(0,1,0) end
+                if dir.Magnitude > 0 then
+                    flyBodyVel.Velocity = dir.Unit * 50
+                    flyBodyGyro.CFrame = CFrame.new(r.Position, r.Position + camera.CFrame.LookVector)
+                else
+                    flyBodyVel.Velocity = Vector3.new(0,0,0)
+                    flyBodyGyro.CFrame = root.CFrame
+                end
+            end)
+        else
+            if flyConn then flyConn:Disconnect() end
+            if flyBodyVel then flyBodyVel:Destroy() end
+            if flyBodyGyro then flyBodyGyro:Destroy() end
+            hum.PlatformStand = false
+        end
+    end
+
+    function toggleNoclip(v)
+        noclipEnabled = v
+        if v then
+            noclipConn = RunService.Stepped:Connect(function()
+                if player.Character then
+                    for _,p in ipairs(player.Character:GetDescendants()) do if p:IsA("BasePart") then p.CanCollide=false end end
+                end
+            end)
+        else
+            if noclipConn then noclipConn:Disconnect() end
+            if player.Character then
+                for _,p in ipairs(player.Character:GetDescendants()) do if p:IsA("BasePart") then p.CanCollide=true end end
+            end
+        end
+    end
+
+    -- Анимация появления
+    main.AnchorPoint = Vector2.new(0.5,0.5)
+    main.Position, main.Size = UDim2.new(0.5,0,0.5,0), UDim2.new(0,0,0,0)
+    TweenService:Create(main, TweenInfo.new(0.5, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Size=UDim2.new(0,680,0,460)}):Play()
+end
